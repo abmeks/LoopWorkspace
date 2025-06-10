@@ -51,8 +51,14 @@ platform :ios do
       build_number: current_build_number
     )      
     
+    # Install certificates and provisioning profiles in readonly mode.
+    # This avoids trying to create new profiles (which triggers the 'templateName' error)
+    ENV["MATCH_READONLY"] = true.to_s
     match(
       type: "appstore",
+      force: false,
+      readonly: true,
+      verbose: true,
       git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
       app_identifier: [
         "com.#{TEAMID}.loopkit.Loop", 
@@ -162,6 +168,7 @@ platform :ios do
   desc "Provision Identifiers and Certificates"
   lane :identifiers do
     setup_ci if ENV['CI']
+    # For creating new certificates and profiles via API, be sure to set MATCH_READONLY to false
     ENV["MATCH_READONLY"] = false.to_s
     
     app_store_connect_api_key(
@@ -210,8 +217,9 @@ platform :ios do
   desc "Provision Certificates"
   lane :certs do
     setup_ci if ENV['CI']
-    ENV["MATCH_READONLY"] = false.to_s
-    
+    # Set MATCH_READONLY to true to force the installation of stored certificates rather than creating new ones
+    ENV["MATCH_READONLY"] = true.to_s
+
     app_store_connect_api_key(
       key_id: "#{FASTLANE_KEY_ID}",
       issuer_id: "#{FASTLANE_ISSUER_ID}",
@@ -221,6 +229,7 @@ platform :ios do
     match(
       type: "appstore",
       force: false,
+      readonly: true,
       verbose: true,
       git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
       app_identifier: [
@@ -229,7 +238,7 @@ platform :ios do
         "com.#{TEAMID}.loopkit.Loop.LoopWatch.watchkitextension", 
         "com.#{TEAMID}.loopkit.Loop.LoopWatch", 
         "com.#{TEAMID}.loopkit.Loop.Loop-Intent-Extension",
-        "com.#{TEAMID}.loopkit.Loop.LoopWidgetExtension",
+        "com.#{TEAMID}.loopkit.Loop.LoopWidgetExtension"
       ]
     )
   end
@@ -254,9 +263,8 @@ platform :ios do
     match(
       type: "appstore",
       git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
-      app_identifier: [],
+      app_identifier: []
     )
-
   end
   
   desc "Nuke Certs"
@@ -307,9 +315,7 @@ platform :ios do
       # Check for expiration
       distribution_certs.each do |cert|
         expiration_date = Time.parse(cert.expiration_date)
-
         puts "Current Distribution Certificate: #{cert.id}, Expiration date: #{expiration_date}"
-
         if expiration_date < Time.now
           puts "Distribution Certificate #{cert.id} is expired! Triggering action to renew certificate."
           new_certificate_needed = true
