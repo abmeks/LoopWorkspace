@@ -1,14 +1,5 @@
 # This file contains the fastlane.tools configuration
 # You can find the documentation at https://docs.fastlane.tools
-#
-# For a list of all available actions, check out
-#
-#     https://docs.fastlane.tools/actions
-#
-# For a list of all available plugins, check out
-#
-#     https://docs.fastlane.tools/plugins/available-plugins
-#
 
 default_platform(:ios)
 
@@ -27,7 +18,7 @@ platform :ios do
   desc "Build Loop"
   lane :build_loop do
     setup_ci if ENV['CI']
-    
+
     update_project_team(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       teamid: "#{TEAMID}"
@@ -41,7 +32,7 @@ platform :ios do
 
     previous_build_number = latest_testflight_build_number(
       app_identifier: "com.#{TEAMID}.loopkit.Loop",
-      api_key: api_key,
+      api_key: api_key
     )
 
     current_build_number = previous_build_number + 1
@@ -49,42 +40,26 @@ platform :ios do
     increment_build_number(
       xcodeproj: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       build_number: current_build_number
-    )      
-    
-    # Install certificates and provisioning profiles in readonly mode.
-    # This avoids trying to create new profiles (which triggers the 'templateName' error)
-    ENV["MATCH_READONLY"] = true.to_s
+    )
+
+    # Install certificates and provisioning profiles, allow creation if missing
+    ENV["MATCH_READONLY"] = "false"
     match(
       type: "appstore",
       force: false,
-      readonly: true,
       verbose: true,
       git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
       app_identifier: [
-        "com.#{TEAMID}.loopkit.Loop", 
-        "com.#{TEAMID}.loopkit.Loop.statuswidget", 
-        "com.#{TEAMID}.loopkit.Loop.LoopWatch.watchkitextension", 
-        "com.#{TEAMID}.loopkit.Loop.LoopWatch", 
+        "com.#{TEAMID}.loopkit.Loop",
+        "com.#{TEAMID}.loopkit.Loop.statuswidget",
+        "com.#{TEAMID}.loopkit.Loop.LoopWatch.watchkitextension",
+        "com.#{TEAMID}.loopkit.Loop.LoopWatch",
         "com.#{TEAMID}.loopkit.Loop.Loop-Intent-Extension",
         "com.#{TEAMID}.loopkit.Loop.LoopWidgetExtension"
       ]
     )
 
-    previous_build_number = latest_testflight_build_number(
-      app_identifier: "com.#{TEAMID}.loopkit.Loop",
-      api_key: api_key,
-    )
-
-    current_build_number = previous_build_number + 1
-
-    increment_build_number(
-      xcodeproj: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
-      build_number: current_build_number
-    )
-    
-    mapping = Actions.lane_context[
-      SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING
-    ]
+    mapping = Actions.lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING]
 
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
@@ -105,28 +80,28 @@ platform :ios do
       code_sign_identity: "iPhone Distribution",
       targets: ["Loop Status Extension"]
     )
-    
+
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       profile_name: mapping["com.#{TEAMID}.loopkit.Loop.LoopWatch.watchkitextension"],
       code_sign_identity: "iPhone Distribution",
       targets: ["WatchApp Extension"]
     )
-    
+
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       profile_name: mapping["com.#{TEAMID}.loopkit.Loop.LoopWatch"],
       code_sign_identity: "iPhone Distribution",
       targets: ["WatchApp"]
     )
-    
+
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       profile_name: mapping["com.#{TEAMID}.loopkit.Loop.Loop-Intent-Extension"],
       code_sign_identity: "iPhone Distribution",
       targets: ["Loop Intent Extension"]
     )
-    
+
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       profile_name: mapping["com.#{TEAMID}.loopkit.Loop.LoopWidgetExtension"],
@@ -156,21 +131,20 @@ platform :ios do
       issuer_id: "#{FASTLANE_ISSUER_ID}",
       key_content: "#{FASTLANE_KEY}"
     )
-    
+
     upload_to_testflight(
       api_key: api_key,
       skip_submission: false,
       ipa: "Loop.ipa",
-      skip_waiting_for_build_processing: true,
+      skip_waiting_for_build_processing: true
     )
   end
 
   desc "Provision Identifiers and Certificates"
   lane :identifiers do
     setup_ci if ENV['CI']
-    # For creating new certificates and profiles via API, be sure to set MATCH_READONLY to false
-    ENV["MATCH_READONLY"] = false.to_s
-    
+    ENV["MATCH_READONLY"] = "false"
+
     app_store_connect_api_key(
       key_id: "#{FASTLANE_KEY_ID}",
       issuer_id: "#{FASTLANE_ISSUER_ID}",
@@ -179,9 +153,9 @@ platform :ios do
 
     def configure_bundle_id(name, identifier, capabilities)
       bundle_id = Spaceship::ConnectAPI::BundleId.find(identifier) || Spaceship::ConnectAPI::BundleId.create(name: name, identifier: identifier)
-      capabilities.each { |capability|
+      capabilities.each do |capability|
         bundle_id.create_capability(capability)
-      }
+      end
     end
 
     configure_bundle_id("Loop", "com.#{TEAMID}.loopkit.Loop", [
@@ -211,21 +185,19 @@ platform :ios do
     configure_bundle_id("Loop Widget Extension", "com.#{TEAMID}.loopkit.Loop.LoopWidgetExtension", [
       Spaceship::ConnectAPI::BundleIdCapability::Type::APP_GROUPS
     ])
-    
   end
 
   desc "Provision Certificates"
   lane :certs do
     setup_ci if ENV['CI']
-    # Set MATCH_READONLY to true to force the installation of stored certificates rather than creating new ones
-    ENV["MATCH_READONLY"] = true.to_s
+    ENV["MATCH_READONLY"] = "true"
 
     app_store_connect_api_key(
       key_id: "#{FASTLANE_KEY_ID}",
       issuer_id: "#{FASTLANE_ISSUER_ID}",
       key_content: "#{FASTLANE_KEY}"
     )
-    
+
     match(
       type: "appstore",
       force: false,
@@ -233,10 +205,10 @@ platform :ios do
       verbose: true,
       git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
       app_identifier: [
-        "com.#{TEAMID}.loopkit.Loop", 
-        "com.#{TEAMID}.loopkit.Loop.statuswidget", 
-        "com.#{TEAMID}.loopkit.Loop.LoopWatch.watchkitextension", 
-        "com.#{TEAMID}.loopkit.Loop.LoopWatch", 
+        "com.#{TEAMID}.loopkit.Loop",
+        "com.#{TEAMID}.loopkit.Loop.statuswidget",
+        "com.#{TEAMID}.loopkit.Loop.LoopWatch.watchkitextension",
+        "com.#{TEAMID}.loopkit.Loop.LoopWatch",
         "com.#{TEAMID}.loopkit.Loop.Loop-Intent-Extension",
         "com.#{TEAMID}.loopkit.Loop.LoopWidgetExtension"
       ]
@@ -246,16 +218,16 @@ platform :ios do
   desc "Validate Secrets"
   lane :validate_secrets do
     setup_ci if ENV['CI']
-    ENV["MATCH_READONLY"] = true.to_s
-    
+    ENV["MATCH_READONLY"] = "true"
+
     app_store_connect_api_key(
       key_id: "#{FASTLANE_KEY_ID}",
       issuer_id: "#{FASTLANE_ISSUER_ID}",
       key_content: "#{FASTLANE_KEY}"
     )
-    
+
     def find_bundle_id(identifier)
-      bundle_id = Spaceship::ConnectAPI::BundleId.find(identifier)
+      Spaceship::ConnectAPI::BundleId.find(identifier)
     end
 
     find_bundle_id("com.#{TEAMID}.loopkit.Loop")
@@ -266,18 +238,18 @@ platform :ios do
       app_identifier: []
     )
   end
-  
+
   desc "Nuke Certs"
   lane :nuke_certs do
     setup_ci if ENV['CI']
-    ENV["MATCH_READONLY"] = false.to_s
-    
+    ENV["MATCH_READONLY"] = "false"
+
     app_store_connect_api_key(
       key_id: "#{FASTLANE_KEY_ID}",
       issuer_id: "#{FASTLANE_ISSUER_ID}",
       key_content: "#{FASTLANE_KEY}"
     )
-    
+
     match_nuke(
       type: "appstore",
       team_id: "#{TEAMID}",
@@ -289,13 +261,13 @@ platform :ios do
   desc "Check Certificates and Trigger Workflow for Expired or Missing Certificates"
   lane :check_and_renew_certificates do
     setup_ci if ENV['CI']
-    ENV["MATCH_READONLY"] = false.to_s
+    ENV["MATCH_READONLY"] = "false"
 
     # Authenticate using App Store Connect API Key
     api_key = app_store_connect_api_key(
       key_id: ENV["FASTLANE_KEY_ID"],
       issuer_id: ENV["FASTLANE_ISSUER_ID"],
-      key_content: ENV["FASTLANE_KEY"] # Ensure valid key content
+      key_content: ENV["FASTLANE_KEY"]
     )
 
     # Initialize flag to track if renewal of certificates is needed
@@ -327,7 +299,7 @@ platform :ios do
 
     # Write result to new_certificate_needed.txt
     file_path = File.expand_path('new_certificate_needed.txt')
-    File.write(file_path, new_certificate_needed ? 'true' : 'false')  
+    File.write(file_path, new_certificate_needed ? 'true' : 'false')
 
     # Log the absolute path and contents of the new_certificate_needed.txt file
     puts ""
