@@ -1,5 +1,6 @@
 # This file contains the fastlane.tools configuration
 # You can find the documentation at https://docs.fastlane.tools
+opt_out_usage
 
 default_platform(:ios)
 
@@ -151,40 +152,28 @@ platform :ios do
       key_content: "#{FASTLANE_KEY}"
     )
 
-    def configure_bundle_id(name, identifier, capabilities)
-      bundle_id = Spaceship::ConnectAPI::BundleId.find(identifier) || Spaceship::ConnectAPI::BundleId.create(name: name, identifier: identifier)
-      capabilities.each do |capability|
-        bundle_id.create_capability(capability)
-      end
-    end
+    # Create or find bundle IDs
+    loop_bundle_id = Spaceship::ConnectAPI::BundleId.find("com.#{TEAMID}.loopkit.Loop") || 
+                     Spaceship::ConnectAPI::BundleId.create(name: "Loop", identifier: "com.#{TEAMID}.loopkit.Loop")
+    
+    intent_bundle_id = Spaceship::ConnectAPI::BundleId.find("com.#{TEAMID}.loopkit.Loop.Loop-Intent-Extension") || 
+                       Spaceship::ConnectAPI::BundleId.create(name: "Loop Intent Extension", identifier: "com.#{TEAMID}.loopkit.Loop.Loop-Intent-Extension")
+    
+    status_bundle_id = Spaceship::ConnectAPI::BundleId.find("com.#{TEAMID}.loopkit.Loop.statuswidget") || 
+                       Spaceship::ConnectAPI::BundleId.create(name: "Loop Status Extension", identifier: "com.#{TEAMID}.loopkit.Loop.statuswidget")
+    
+    watch_bundle_id = Spaceship::ConnectAPI::BundleId.find("com.#{TEAMID}.loopkit.Loop.LoopWatch") || 
+                      Spaceship::ConnectAPI::BundleId.create(name: "WatchApp", identifier: "com.#{TEAMID}.loopkit.Loop.LoopWatch")
+    
+    watch_ext_bundle_id = Spaceship::ConnectAPI::BundleId.find("com.#{TEAMID}.loopkit.Loop.LoopWatch.watchkitextension") || 
+                          Spaceship::ConnectAPI::BundleId.create(name: "WatchApp Extension", identifier: "com.#{TEAMID}.loopkit.Loop.LoopWatch.watchkitextension")
+    
+    widget_bundle_id = Spaceship::ConnectAPI::BundleId.find("com.#{TEAMID}.loopkit.Loop.LoopWidgetExtension") || 
+                       Spaceship::ConnectAPI::BundleId.create(name: "Loop Widget Extension", identifier: "com.#{TEAMID}.loopkit.Loop.LoopWidgetExtension")
 
-    configure_bundle_id("Loop", "com.#{TEAMID}.loopkit.Loop", [
-      Spaceship::ConnectAPI::BundleIdCapability::Type::APP_GROUPS,
-      Spaceship::ConnectAPI::BundleIdCapability::Type::HEALTHKIT,
-      Spaceship::ConnectAPI::BundleIdCapability::Type::PUSH_NOTIFICATIONS,
-      Spaceship::ConnectAPI::BundleIdCapability::Type::SIRIKIT,
-      Spaceship::ConnectAPI::BundleIdCapability::Type::USERNOTIFICATIONS_TIMESENSITIVE,
-      Spaceship::ConnectAPI::BundleIdCapability::Type::NFC_TAG_READING
-    ])
-
-    configure_bundle_id("Loop Intent Extension", "com.#{TEAMID}.loopkit.Loop.Loop-Intent-Extension", [
-      Spaceship::ConnectAPI::BundleIdCapability::Type::APP_GROUPS
-    ])
-
-    configure_bundle_id("Loop Status Extension", "com.#{TEAMID}.loopkit.Loop.statuswidget", [
-      Spaceship::ConnectAPI::BundleIdCapability::Type::APP_GROUPS
-    ])
-
-    configure_bundle_id("WatchApp", "com.#{TEAMID}.loopkit.Loop.LoopWatch", [])
-
-    configure_bundle_id("WatchApp Extension", "com.#{TEAMID}.loopkit.Loop.LoopWatch.watchkitextension", [
-      Spaceship::ConnectAPI::BundleIdCapability::Type::HEALTHKIT,
-      Spaceship::ConnectAPI::BundleIdCapability::Type::SIRIKIT
-    ])
-
-    configure_bundle_id("Loop Widget Extension", "com.#{TEAMID}.loopkit.Loop.LoopWidgetExtension", [
-      Spaceship::ConnectAPI::BundleIdCapability::Type::APP_GROUPS
-    ])
+    # Note: Capabilities may need to be configured manually in App Store Connect
+    # The API for creating capabilities has changed
+    puts "Bundle IDs created/found. You may need to configure capabilities manually in App Store Connect."
   end
 
   desc "Provision Certificates"
