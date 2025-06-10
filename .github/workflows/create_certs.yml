@@ -13,10 +13,29 @@ env:
   FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
 
 jobs:
-  validate:
-    name: Validate
-    uses: ./.github/workflows/validate_secrets.yml
-    secrets: inherit
+  create_certs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Update Fastlane
+        run: bundle update fastlane
+
+      - name: Install Dependencies
+        run: bundle install
+
+      - name: Create or Update Certificates
+        run: |
+          ENABLE_NUKE_CERTS=${{ vars.ENABLE_NUKE_CERTS }}
+          FORCE_NUKE_CERTS=${{ vars.FORCE_NUKE_CERTS }}
+
+          if [[ "$ENABLE_NUKE_CERTS" == "true" || "$FORCE_NUKE_CERTS" == "true" ]]; then
+            bundle exec fastlane nuke_certs
+            bundle exec fastlane certs
+          else
+            echo "::error::Certificate renewal skipped due to missing ENABLE_NUKE_CERTS or FORCE_NUKE_CERTS."
+          fi
 
 
   create_certs:
