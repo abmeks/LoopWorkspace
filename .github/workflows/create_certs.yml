@@ -40,8 +40,7 @@ jobs:
           if [ -f "$TABLE_PRINTER_PATH" ]; then
             sed -i "" "/puts(Terminal::Table.new(params))/d" "$TABLE_PRINTER_PATH"
           else
-            echo "table_printer.rb not found"
-            exit 1
+            echo "Warning: table_printer.rb not found. Continuing without changes."
           fi
       
       - name: Sync clock
@@ -49,7 +48,7 @@ jobs:
       
       - name: Check and create or update Distribution certificate and profiles if needed
         run: |
-          # Ensure that your Fastfile's lane "certs" is configured with readonly mode.
+          # Run the certs lane which will create certificates if needed
           echo "Running Fastlane certs lane..."
           bundle exec fastlane certs || true
       
