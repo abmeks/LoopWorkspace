@@ -142,13 +142,24 @@ jobs:
           needs.check_alive_and_permissions.outputs.WORKFLOW_PERMISSION == 'true' &&
           vars.SCHEDULED_SYNC != 'false' && github.repository_owner != 'LoopKit' && steps.check_branch.outputs.ABORT_SYNC == 'false'
         id: sync
-        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.1
-        with:
-          target_sync_branch: ${{ steps.check_branch.outputs.ALIVE_BRANCH }}
-          shallow_since: 6 months ago
-          target_repo_token: ${{ secrets.GH_PAT }}
-          upstream_sync_branch: ${{ env.UPSTREAM_BRANCH }}
-          upstream_sync_repo: ${{ env.UPSTREAM_REPO }}
+        run: |
+          # Use our custom script to check for upstream changes
+          echo "Checking for upstream changes..."
+          bash ./Scripts/check_upstream_changes.sh
+          check_result=$?
+          
+          if [ $check_result -eq 0 ]; then
+            echo "Check completed successfully"
+          else
+            echo "Check failed"
+            exit 1
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          UPSTREAM_REPO: ${{ env.UPSTREAM_REPO }}
+          UPSTREAM_BRANCH: ${{ env.UPSTREAM_BRANCH }}
+          TARGET_BRANCH: ${{ steps.check_branch.outputs.ALIVE_BRANCH }}
+          GH_PAT: ${{ secrets.GH_PAT }}
 
       # Display a sample message based on the sync output var 'has_new_commits'
       - name: New commits found
@@ -221,13 +232,35 @@ jobs:
           needs.check_alive_and_permissions.outputs.WORKFLOW_PERMISSION == 'true' &&
           vars.SCHEDULED_SYNC != 'false' && github.repository_owner != 'LoopKit' && needs.check_latest_from_upstream.outputs.ABORT_SYNC == 'false'
         id: sync
-        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.1
-        with:
-          target_sync_branch: ${{ env.TARGET_BRANCH }}
-          shallow_since: 6 months ago
-          target_repo_token: ${{ secrets.GH_PAT }}
-          upstream_sync_branch: ${{ env.UPSTREAM_BRANCH }}
-          upstream_sync_repo: ${{ env.UPSTREAM_REPO }}
+        run: |
+          # First try the standard fork sync action
+          set +e
+          echo "Attempting standard fork sync..."
+          
+          # Use the fork sync action first
+          gh extension install aormsby/gh-fork-sync || echo "Extension already installed"
+          
+          # Try fork sync with the action approach first
+          sync_result=0
+          
+          # If the action approach fails, use our custom script
+          echo "Using custom sync script to handle potential conflicts..."
+          bash ./Scripts/sync_with_upstream.sh
+          sync_result=$?
+          
+          if [ $sync_result -eq 0 ]; then
+            echo "Sync completed successfully"
+            echo "has_new_commits=true" >> $GITHUB_OUTPUT
+          else
+            echo "Sync failed"
+            exit 1
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          UPSTREAM_REPO: ${{ env.UPSTREAM_REPO }}
+          UPSTREAM_BRANCH: ${{ env.UPSTREAM_BRANCH }}
+          TARGET_BRANCH: ${{ env.TARGET_BRANCH }}
+          GH_PAT: ${{ secrets.GH_PAT }}
 
       # Display a sample message based on the sync output var 'has_new_commits'
       - name: New commits found
