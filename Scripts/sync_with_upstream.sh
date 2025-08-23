@@ -71,14 +71,10 @@ fi
 
 # Attempt merge with upstream
 echo -e "${YELLOW}Attempting to merge upstream changes${NC}"
-if git merge "upstream/$UPSTREAM_BRANCH" --no-edit --allow-unrelated-histories; then
+if git merge "upstream/$UPSTREAM_BRANCH" --no-edit; then
     echo -e "${GREEN}Successfully merged upstream changes without conflicts${NC}"
     echo -e "${GREEN}Pushing changes to origin${NC}"
-    if [ "$GH_PAT" = "dummy" ]; then
-        echo -e "${YELLOW}Skipping push (dummy PAT provided)${NC}"
-    else
-        git push origin "$TARGET_BRANCH"
-    fi
+    git push origin "$TARGET_BRANCH"
     exit 0
 fi
 
