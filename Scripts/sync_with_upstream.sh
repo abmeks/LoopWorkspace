@@ -130,26 +130,46 @@ for file in $CONFLICTED_FILES; do
             ;;
         *)
             echo -e "${RED}Unhandled conflict in $file${NC}"
-            echo -e "${YELLOW}Taking upstream version as default${NC}"
-            git checkout --theirs "$file"
-            git add "$file"
-            echo -e "${GREEN}Resolved $file by taking upstream version${NC}"
+            # Check if this is a submodule
+            if git ls-files -s "$file" | grep -q "^160000"; then
+                echo -e "${YELLOW}Resolving submodule conflict: $file${NC}"
+                # For submodules, get the upstream commit hash and set it
+                UPSTREAM_COMMIT=$(git ls-tree "upstream/$UPSTREAM_BRANCH" "$file" | awk '{print $3}')
+                if [ -n "$UPSTREAM_COMMIT" ]; then
+                    git update-index --add --cacheinfo 160000 "$UPSTREAM_COMMIT" "$file"
+                    echo -e "${GREEN}Resolved submodule $file by taking upstream commit $UPSTREAM_COMMIT${NC}"
+                else
+                    echo -e "${RED}Could not resolve submodule $file - no upstream commit found${NC}"
+                    exit 1
+                fi
+            else
+                echo -e "${YELLOW}Taking upstream version as default${NC}"
+                git checkout --theirs "$file"
+                git add "$file"
+                echo -e "${GREEN}Resolved $file by taking upstream version${NC}"
+            fi
             ;;
     esac
 done
 
 # Handle submodule conflicts
-echo -e "${YELLOW}Checking for submodule conflicts${NC}"
-SUBMODULE_CONFLICTS=$(git diff --name-only --diff-filter=U | grep -E '^[^/]+$' | head -20 || true)
+echo -e "${YELLOW}Checking for remaining submodule conflicts${NC}"
+SUBMODULE_CONFLICTS=$(git diff --name-only --diff-filter=U | head -20 || true)
 
 if [ -n "$SUBMODULE_CONFLICTS" ]; then
-    echo "Submodule conflicts found, resolving..."
-    for submodule in $SUBMODULE_CONFLICTS; do
-        if [ -d "$submodule" ]; then
-            echo -e "${YELLOW}Resolving submodule conflict: $submodule${NC}"
-            # Take upstream version for submodules
-            git add "$submodule"
-            echo -e "${GREEN}Resolved submodule $submodule${NC}"
+    echo "Remaining conflicts found, resolving..."
+    for file in $SUBMODULE_CONFLICTS; do
+        if git ls-files -s "$file" | grep -q "^160000"; then
+            echo -e "${YELLOW}Resolving remaining submodule conflict: $file${NC}"
+            # For submodules, get the upstream commit hash and set it
+            UPSTREAM_COMMIT=$(git ls-tree "upstream/$UPSTREAM_BRANCH" "$file" | awk '{print $3}')
+            if [ -n "$UPSTREAM_COMMIT" ]; then
+                git update-index --add --cacheinfo 160000 "$UPSTREAM_COMMIT" "$file"
+                echo -e "${GREEN}Resolved submodule $file by taking upstream commit $UPSTREAM_COMMIT${NC}"
+            else
+                echo -e "${RED}Could not resolve submodule $file - no upstream commit found${NC}"
+                exit 1
+            fi
         fi
     done
 fi
@@ -170,6 +190,10 @@ echo -e "${GREEN}Successfully resolved all conflicts and completed merge${NC}"
 
 # Push changes
 echo -e "${YELLOW}Pushing changes to origin${NC}"
-git push origin "$TARGET_BRANCH"
+if [ "$GH_PAT" = "dummy" ]; then
+    echo -e "${YELLOW}Skipping push (dummy PAT provided)${NC}"
+else
+    git push origin "$TARGET_BRANCH"
+fi
 
 echo -e "${GREEN}Sync completed successfully${NC}"
