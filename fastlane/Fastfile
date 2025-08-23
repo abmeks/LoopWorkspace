@@ -16,6 +16,35 @@ DEVICE_ID = ENV["DEVICE_ID"]
 ENV["FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT"] = "120"
 
 platform :ios do
+  # Helper method to handle WWDR certificate issues
+  def safe_match(options)
+    begin
+      match(options)
+    rescue => error
+      if error.message.include?("Could not install WWDR certificate") || 
+         error.message.include?("Failed to connect to www.apple.com")
+        UI.important("WWDR Certificate installation failed: #{error.message}")
+        UI.important("Attempting to continue without WWDR certificate...")
+        
+        # Try to proceed by setting skip options
+        new_options = options.dup
+        new_options[:skip_docs] = true
+        new_options[:skip_certificate_matching] = false
+        
+        begin
+          match(new_options)
+        rescue => retry_error
+          UI.error("Match failed even with adjusted options: #{retry_error.message}")
+          UI.important("This may be due to network connectivity issues with Apple servers")
+          UI.important("Please try running the workflow again, or check your network connection")
+          raise retry_error
+        end
+      else
+        raise error
+      end
+    end
+  end
+
   desc "Build Loop"
   lane :build_loop do
     setup_ci if ENV['CI']
@@ -45,7 +74,7 @@ platform :ios do
 
     # Install certificates and provisioning profiles, allow creation if missing
     ENV["MATCH_READONLY"] = "false"
-    match(
+    safe_match(
       type: "appstore",
       force: false,
       verbose: true,
@@ -187,7 +216,7 @@ platform :ios do
       key_content: "#{FASTLANE_KEY}"
     )
 
-    match(
+    safe_match(
       type: "appstore",
       force: false,
       readonly: false,

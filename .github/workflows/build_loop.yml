@@ -353,6 +353,56 @@ jobs:
       - name: Sync clock
         run: sudo sntp -sS time.windows.com
 
+      - name: Pre-install Apple WWDR Certificate
+        run: |
+          # Download and install Apple WWDR Certificate to prevent fastlane download issues
+          echo "Pre-installing Apple WWDR Certificate..."
+          WWDR_URL="https://www.apple.com/certificateauthority/AppleWWDRCAG6.cer"
+          WWDR_CERT="/tmp/AppleWWDRCAG6.cer"
+          
+          # Try multiple methods to download the certificate
+          if curl -f -o "$WWDR_CERT" --retry 3 --retry-delay 5 --connect-timeout 30 "$WWDR_URL"; then
+            echo "Successfully downloaded WWDR certificate via curl"
+          elif wget -O "$WWDR_CERT" --tries=3 --timeout=30 "$WWDR_URL"; then
+            echo "Successfully downloaded WWDR certificate via wget"
+          else
+            echo "Failed to download WWDR certificate from primary URL"
+            # Try alternative URL
+            WWDR_ALT_URL="https://developer.apple.com/certificationauthority/AppleWWDRCAG6.cer"
+            if curl -f -o "$WWDR_CERT" --retry 2 --retry-delay 3 --connect-timeout 20 "$WWDR_ALT_URL"; then
+              echo "Successfully downloaded WWDR certificate from alternative URL"
+            else
+              echo "Failed to download WWDR certificate from all sources"
+              echo "Setting environment variable to skip WWDR checks"
+              echo "FASTLANE_SKIP_WWDR_CHECK=true" >> $GITHUB_ENV
+              exit 0
+            fi
+          fi
+          
+          # Install the certificate if we successfully downloaded it
+          if [ -f "$WWDR_CERT" ]; then
+            echo "Installing WWDR certificate to system keychain..."
+            # Try installing to both login keychain and temporary keychain
+            security import "$WWDR_CERT" -k ~/Library/Keychains/login.keychain-db -T /usr/bin/codesign || echo "Login keychain import failed"
+            
+            # Create temporary keychain for fastlane if it doesn't exist
+            TEMP_KEYCHAIN="fastlane_tmp_keychain-db"
+            if ! security list-keychains | grep -q "$TEMP_KEYCHAIN"; then
+              security create-keychain -p "" "$TEMP_KEYCHAIN" || echo "Temporary keychain creation failed"
+              security set-keychain-settings -t 3600 -l "$TEMP_KEYCHAIN" || echo "Keychain settings failed"
+              security list-keychains -s ~/Library/Keychains/login.keychain-db ~/Library/Keychains/"$TEMP_KEYCHAIN" || echo "Keychain list update failed"
+            fi
+            
+            # Import to temporary keychain
+            security import "$WWDR_CERT" -k ~/Library/Keychains/"$TEMP_KEYCHAIN" -T /usr/bin/codesign || echo "Temporary keychain import failed"
+            
+            echo "WWDR certificate installation completed"
+            echo "FASTLANE_WWDR_AVAILABLE=true" >> $GITHUB_ENV
+          else
+            echo "WWDR certificate file not found after download attempts"
+            echo "FASTLANE_SKIP_WWDR_CHECK=true" >> $GITHUB_ENV
+          fi
+
       # Build signed Loop IPA file
       - name: Fastlane Build & Archive
         run: bundle exec fastlane build_loop
