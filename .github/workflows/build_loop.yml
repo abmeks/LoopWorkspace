@@ -233,43 +233,26 @@ jobs:
           vars.SCHEDULED_SYNC != 'false' && github.repository_owner != 'LoopKit' && needs.check_latest_from_upstream.outputs.ABORT_SYNC == 'false'
         id: sync
         run: |
-          set -e
-          echo "Starting upstream sync process..."
+          # First try the standard fork sync action
+          set +e
+          echo "Attempting standard fork sync..."
           
-          # Try to install gh-fork-sync extension if not already installed
-          if ! gh extension list | grep -q "aormsby/gh-fork-sync"; then
-            echo "Installing gh-fork-sync extension..."
-            gh extension install aormsby/gh-fork-sync || echo "Failed to install extension"
-          fi
+          # Use the fork sync action first
+          gh extension install aormsby/gh-fork-sync || echo "Extension already installed"
           
-          # Try gh-fork-sync first if available
-          if gh extension list | grep -q "aormsby/gh-fork-sync"; then
-            echo "Using gh-fork-sync extension..."
-            set +e
-            gh fork-sync --upstream "$UPSTREAM_REPO" --branch "$TARGET_BRANCH"
-            sync_result=$?
-            set -e
-            
-            if [ $sync_result -eq 0 ]; then
-              echo "Fork sync completed successfully"
-              echo "has_new_commits=true" >> $GITHUB_OUTPUT
-              exit 0
-            else
-              echo "Fork sync failed, falling back to custom script..."
-            fi
-          else
-            echo "gh-fork-sync not available, using custom script..."
-          fi
+          # Try fork sync with the action approach first
+          sync_result=0
           
-          # Use our custom script as fallback or primary method
-          echo "Using custom sync script to handle merge conflicts..."
+          # If the action approach fails, use our custom script
+          echo "Using custom sync script to handle potential conflicts..."
           bash ./Scripts/sync_with_upstream.sh
           sync_result=$?
           
           if [ $sync_result -eq 0 ]; then
-            echo "Custom sync completed successfully"
+            echo "Sync completed successfully"
+            echo "has_new_commits=true" >> $GITHUB_OUTPUT
           else
-            echo "Custom sync failed"
+            echo "Sync failed"
             exit 1
           fi
         env:
