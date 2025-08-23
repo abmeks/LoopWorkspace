@@ -10,8 +10,9 @@ on:
   #   affect other OS apps if run simultaneously.
   # Each OS needs a time of day distinct from other apps, LoopWorkspace uses 9 every Wed and 7 every 1st of month
   schedule:
-    - cron: "0 9 * * 3" # Checks for updates at 09:00 UTC every Wednesday
-    - cron: "0 7 1 * *" # Builds the app on the 1st of every month at 07:00 UTC
+    # avoid starting an action at hh:00 when GitHub resources are impacted
+    - cron: "33 9 * * 3" # Checks for updates at 09:33 UTC every Wednesday
+    - cron: "33 7 1 * *" # Builds the app on the 1st of every month at 07:33 UTC
 
 env:
   UPSTREAM_REPO: LoopKit/LoopWorkspace
@@ -142,24 +143,13 @@ jobs:
           needs.check_alive_and_permissions.outputs.WORKFLOW_PERMISSION == 'true' &&
           vars.SCHEDULED_SYNC != 'false' && github.repository_owner != 'LoopKit' && steps.check_branch.outputs.ABORT_SYNC == 'false'
         id: sync
-        run: |
-          # Use our custom script to check for upstream changes
-          echo "Checking for upstream changes..."
-          bash ./Scripts/check_upstream_changes.sh
-          check_result=$?
-          
-          if [ $check_result -eq 0 ]; then
-            echo "Check completed successfully"
-          else
-            echo "Check failed"
-            exit 1
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
-          UPSTREAM_REPO: ${{ env.UPSTREAM_REPO }}
-          UPSTREAM_BRANCH: ${{ env.UPSTREAM_BRANCH }}
-          TARGET_BRANCH: ${{ steps.check_branch.outputs.ALIVE_BRANCH }}
-          GH_PAT: ${{ secrets.GH_PAT }}
+        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.1
+        with:
+          target_sync_branch: ${{ steps.check_branch.outputs.ALIVE_BRANCH }}
+          shallow_since: 6 months ago
+          target_repo_token: ${{ secrets.GH_PAT }}
+          upstream_sync_branch: ${{ env.UPSTREAM_BRANCH }}
+          upstream_sync_repo: ${{ env.UPSTREAM_REPO }}
 
       # Display a sample message based on the sync output var 'has_new_commits'
       - name: New commits found
@@ -211,7 +201,7 @@ jobs:
       | # runs if started manually, or if sync schedule is set and enabled and scheduled on the first Saturday each month, or if sync schedule is set and enabled and new commits were found
       github.event_name == 'workflow_dispatch' ||
       (needs.check_alive_and_permissions.outputs.WORKFLOW_PERMISSION == 'true' &&
-        (vars.SCHEDULED_BUILD != 'false' && github.event.schedule == '0 7 1 * *') ||
+        (vars.SCHEDULED_BUILD != 'false' && github.event.schedule == '33 7 1 * *') ||
         (vars.SCHEDULED_SYNC != 'false' && needs.check_latest_from_upstream.outputs.NEW_COMMITS == 'true' )
       )
     steps:
@@ -232,52 +222,13 @@ jobs:
           needs.check_alive_and_permissions.outputs.WORKFLOW_PERMISSION == 'true' &&
           vars.SCHEDULED_SYNC != 'false' && github.repository_owner != 'LoopKit' && needs.check_latest_from_upstream.outputs.ABORT_SYNC == 'false'
         id: sync
-        run: |
-          set -e
-          echo "Starting upstream sync process..."
-          
-          # Try to install gh-fork-sync extension if not already installed
-          if ! gh extension list | grep -q "aormsby/gh-fork-sync"; then
-            echo "Installing gh-fork-sync extension..."
-            gh extension install aormsby/gh-fork-sync || echo "Failed to install extension"
-          fi
-          
-          # Try gh-fork-sync first if available
-          if gh extension list | grep -q "aormsby/gh-fork-sync"; then
-            echo "Using gh-fork-sync extension..."
-            set +e
-            gh fork-sync --upstream "$UPSTREAM_REPO" --branch "$TARGET_BRANCH"
-            sync_result=$?
-            set -e
-            
-            if [ $sync_result -eq 0 ]; then
-              echo "Fork sync completed successfully"
-              echo "has_new_commits=true" >> $GITHUB_OUTPUT
-              exit 0
-            else
-              echo "Fork sync failed, falling back to custom script..."
-            fi
-          else
-            echo "gh-fork-sync not available, using custom script..."
-          fi
-          
-          # Use our custom script as fallback or primary method
-          echo "Using custom sync script to handle merge conflicts..."
-          bash ./Scripts/sync_with_upstream.sh
-          sync_result=$?
-          
-          if [ $sync_result -eq 0 ]; then
-            echo "Custom sync completed successfully"
-          else
-            echo "Custom sync failed"
-            exit 1
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
-          UPSTREAM_REPO: ${{ env.UPSTREAM_REPO }}
-          UPSTREAM_BRANCH: ${{ env.UPSTREAM_BRANCH }}
-          TARGET_BRANCH: ${{ env.TARGET_BRANCH }}
-          GH_PAT: ${{ secrets.GH_PAT }}
+        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.1
+        with:
+          target_sync_branch: ${{ env.TARGET_BRANCH }}
+          shallow_since: 6 months ago
+          target_repo_token: ${{ secrets.GH_PAT }}
+          upstream_sync_branch: ${{ env.UPSTREAM_BRANCH }}
+          upstream_sync_repo: ${{ env.UPSTREAM_REPO }}
 
       # Display a sample message based on the sync output var 'has_new_commits'
       - name: New commits found
